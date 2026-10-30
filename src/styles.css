@@ -99,9 +99,11 @@ button {
 .scene {
   display: block;
   width: 100%;
-  aspect-ratio: 800 / 640;
-  cursor: pointer;
-  touch-action: manipulation;
+  aspect-ratio: 10 / 9;
+  max-height: 68vh;
+  cursor: grab;
+  touch-action: none;
+  background: #cfe2ee;
 }
 .speeds {
   display: flex;
@@ -118,6 +120,21 @@ button {
 }
 .speeds button.on {
   background: rgba(255, 255, 255, 0.28);
+}
+.hint {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(20, 30, 26, 0.7);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
 }
 .toast {
   position: absolute;

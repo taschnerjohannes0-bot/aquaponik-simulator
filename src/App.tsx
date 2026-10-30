@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { drawScene, H, hitSlot, hitTank, W } from './render/scene.ts'
+import { GreenhouseView } from './render/greenhouse.ts'
 import { advance, currentAir } from './sim/simulate.ts'
 import { clearSave, load, newGame, save, type GameState } from './sim/state.ts'
 import { FishPanel } from './ui/FishPanel.tsx'
@@ -40,6 +40,11 @@ export default function App() {
   selectedRef.current = selected
   const [toast, setToast] = useState<{ text: string; kind: string } | null>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
+  const [showHint, setShowHint] = useState(true)
+  useEffect(() => {
+    const id = setTimeout(() => setShowHint(false), 9000)
+    return () => clearTimeout(id)
+  }, [])
 
   const rerender = useCallback(() => setTick((t) => t + 1), [])
   const act = useCallback(
@@ -58,7 +63,13 @@ export default function App() {
     let lastUi = 0
     let lastSave = 0
     let seenLog = game.current.flags._seq ?? 0
-    const ctx = canvas.current!.getContext('2d')!
+    const view = new GreenhouseView(canvas.current!, {
+      onSlot: (slot) => {
+        setSelected(slot)
+        setTab('pflanzen')
+      },
+      onTank: () => setTab('fische'),
+    })
     const frame = (now: number) => {
       const dtReal = Math.min(0.1, (now - last) / 1000)
       last = now
@@ -76,17 +87,7 @@ export default function App() {
           if (fresh.some((l) => l.kind === 'bad') && speedRef.current > 0) setSpeed(0)
         }
       }
-      const c = canvas.current
-      if (c) {
-        const dpr = Math.min(2, window.devicePixelRatio || 1)
-        const cw = c.clientWidth
-        if (c.width !== Math.round(cw * dpr)) {
-          c.width = Math.round(cw * dpr)
-          c.height = Math.round(((cw * H) / W) * dpr)
-        }
-        ctx.setTransform(c.width / W, 0, 0, c.height / H, 0, 0)
-        drawScene(ctx, s, now / 1000, selectedRef.current, speedRef.current > 0)
-      }
+      view.render(s, now / 1000, selectedRef.current, speedRef.current > 0)
       if (now - lastUi > 250) {
         lastUi = now
         setTick((t) => t + 1)
@@ -103,6 +104,7 @@ export default function App() {
     document.addEventListener('visibilitychange', onHide)
     return () => {
       cancelAnimationFrame(raf)
+      view.dispose()
       window.removeEventListener('pagehide', onHide)
       document.removeEventListener('visibilitychange', onHide)
     }
@@ -115,17 +117,6 @@ export default function App() {
   }, [toast])
 
   const s = game.current
-  const onCanvasClick = (ev: React.MouseEvent<HTMLCanvasElement>) => {
-    const r = ev.currentTarget.getBoundingClientRect()
-    const x = ((ev.clientX - r.left) / r.width) * W
-    const y = ((ev.clientY - r.top) / r.height) * H
-    const slot = hitSlot(s, x, y)
-    if (slot >= 0) {
-      setSelected(slot)
-      setTab('pflanzen')
-    } else if (hitTank(s, x, y)) setTab('fische')
-  }
-
   return (
     <div className="app">
       <header className="topbar">
@@ -142,7 +133,8 @@ export default function App() {
       </header>
 
       <div className="scene-wrap">
-        <canvas ref={canvas} className="scene" onClick={onCanvasClick} />
+        <canvas ref={canvas} className="scene" />
+        {showHint && <div className="hint">Nach oben wischen: durchs Gewächshaus gehen · zur Seite: umschauen · Tippen: auswählen</div>}
         {toast && (
           <div className={`toast ${toast.kind}`} onClick={() => setTab('tagebuch')}>
             {toast.text}
