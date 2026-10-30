@@ -1,4 +1,4 @@
-import { FISH, MAX_BEDS, PLANTS, PRICES, SLOTS_PER_BED, TANK_SIZES, TAP, type FishId, type PlantId } from './data.ts'
+import { FISH, MAX_BEDS, MAX_MBBR, PLANTS, PRICES, SLOTS_PER_BED, TANK_SIZES, TAP, type FishId, type PlantId } from './data.ts'
 import { addLog, pay, snapshot } from './simulate.ts'
 import type { FishGroup, GameState, Plant } from './state.ts'
 
@@ -63,6 +63,7 @@ export function waterChange(s: GameState, fraction: number) {
   w.temp = w.temp * (1 - fraction) + TAP.temp * fraction
   w.o2 = w.o2 * (1 - fraction) + 9.5 * fraction
   w.solids *= 1 - fraction * 0.5
+  w.salt *= 1 - fraction
   addLog(s, 'info', `${Math.round(fraction * 100)} % Wasser gewechselt (${Math.round(liters)} L Leitungswasser, ${TAP.temp} °C kalt).`)
 }
 
@@ -78,6 +79,7 @@ export function siphon(s: GameState) {
   w.no3 = w.no3 * (1 - f) + TAP.no3 * f
   w.kh = w.kh * (1 - f) + TAP.kh * f
   w.temp = w.temp * (1 - f) + TAP.temp * f
+  w.salt *= 1 - f
   addLog(s, 'info', `Schlamm abgesaugt (${Math.round(removed)} g Futterreste und Kot entfernt).`)
 }
 
@@ -106,6 +108,32 @@ export function addStarter(s: GameState) {
   addLog(s, 'info', 'Bakterienstarter zugegeben. Das Einfahren geht jetzt schneller.')
 }
 
+export function addSalt(s: GameState) {
+  if (s.water.salt >= 6) {
+    addLog(s, 'warn', 'Mehr Salz verträgt die Anlage nicht. Schon ab 2 g/L leiden die Pflanzen.')
+    return
+  }
+  if (!spend(s, PRICES.saltKg * dosesFactor(s))) return
+  s.water.salt += 1
+  addLog(
+    s,
+    'info',
+    `Salz zugegeben, jetzt ${s.water.salt.toFixed(1)} g/L. Ab 2 g/L heilt Weißpünktchen ab und Nitrit wird weniger giftig. Den Pflanzen schadet es auf Dauer, später Wasser wechseln.`,
+  )
+}
+
+/** Radialabscheider entleeren: in den Mineralisierer, sonst auf den Kompost */
+export function emptySludge(s: GameState) {
+  const w = s.water
+  if (w.sludge < 1) return
+  const g = w.sludge
+  w.sludge = 0
+  if (s.equip.mineralizer) {
+    w.mineral += g
+    addLog(s, 'info', `${Math.round(g)} g Schlamm in den Mineralisierer gegeben. Daraus werden Nährstoffe für die Pflanzen.`)
+  } else addLog(s, 'info', `${Math.round(g)} g Schlamm abgelassen (auf den Kompost).`)
+}
+
 // --- Fische ---
 
 export function buyFish(s: GameState, species: FishId, count: number) {
@@ -120,6 +148,8 @@ export function buyFish(s: GameState, species: FishId, count: number) {
     stomach: 0,
     hoursHungry: 0,
     deathAcc: 0,
+    // Neue Fische bringen manchmal Krankheiten mit
+    disease: Math.random() < 0.12 ? 0.03 : 0,
   }
   s.fish.push(g)
   addLog(s, 'info', `${count} junge ${sp.name} (je ${sp.startWeight} g) eingesetzt.`)
@@ -201,6 +231,12 @@ export function harvest(s: GameState, slot: number) {
   }
 }
 
+export function releaseBeneficials(s: GameState) {
+  if (!spend(s, PRICES.beneficials)) return
+  s.beneficials = 1
+  addLog(s, 'info', 'Florfliegen- und Schlupfwespen-Larven ausgebracht. Sie fressen die Blattläuse, ganz ohne Gift.')
+}
+
 export function removePlant(s: GameState, slot: number) {
   s.slots[slot] = null
 }
@@ -272,4 +308,63 @@ export function upgradeTank(s: GameState) {
   w.volume = newV
   s.equip.tankLevel = next
   addLog(s, 'info', `Weitere Fischbecken, jetzt ${newV} L. Mehr Wasser macht die Werte stabiler.`)
+}
+
+// --- Profi-Technik ---
+
+export type EquipItem =
+  | 'degasser'
+  | 'uv'
+  | 'oxygen'
+  | 'generator'
+  | 'batteryAir'
+  | 'mineralizer'
+  | 'doser'
+  | 'airHeater'
+  | 'climate'
+  | 'led'
+  | 'insectNet'
+
+const EQUIP_LOG: Record<EquipItem, string> = {
+  degasser: 'Rieselturm zum Entgasen eingebaut. Er treibt CO₂ aus, dadurch steigt der pH-Wert, und bringt Sauerstoff ein.',
+  uv: 'UV-Klärer eingebaut. Er tötet Keime und Schwebealgen im Wasser ab.',
+  oxygen: 'Sauerstoffkonzentrator mit Diffusor eingebaut. Damit vertragen die Becken deutlich mehr Fische.',
+  generator: 'Notstromaggregat aufgestellt. Bei Stromausfall springt es automatisch an.',
+  batteryAir: 'Akku-Luftpumpe angeschlossen. Sie hält bei Stromausfall die Belüftung am Laufen.',
+  mineralizer: 'Mineralisierungstank aufgestellt. Bakterien machen aus dem Fischschlamm Pflanzendünger.',
+  doser: 'Dosierstation eingebaut. Sie hält Karbonathärte und Eisen automatisch auf dem Sollwert.',
+  airHeater: 'Gas-Warmluftheizer im Gewächshaus montiert. Hält die Luft im Winter frostfrei.',
+  climate: 'Klimasteuerung mit Lüftungsklappen, Ventilatoren und Schattiernetz eingebaut.',
+  led: 'LED-Pflanzenlampen über den Beeten montiert. Sie verlängern im Winter den Tag.',
+  insectNet: 'Insektenschutznetz an Tür und Lüftung gespannt. Es kommen viel weniger Schädlinge rein.',
+}
+
+export function buyEquip(s: GameState, item: EquipItem) {
+  if (s.equip[item] || !spend(s, PRICES[item])) return
+  s.equip[item] = true
+  addLog(s, 'info', EQUIP_LOG[item])
+}
+
+export function upgradeMechFilter(s: GameState) {
+  const next = s.equip.mechFilter + 1
+  if (next >= PRICES.mechFilter.length) return
+  if (!spend(s, PRICES.mechFilter[next])) return
+  s.equip.mechFilter = next
+  addLog(
+    s,
+    'info',
+    next === 1
+      ? 'Radialabscheider eingebaut. Er holt Kot und Futterreste aus dem Wasser. Den Schlamm musst du ab und zu ablassen.'
+      : 'Trommelfilter eingebaut. Er siebt Feststoffe fein heraus und spült sie selbst aus.',
+  )
+}
+
+export function buyMbbr(s: GameState) {
+  if (s.equip.mbbr >= MAX_MBBR || !spend(s, PRICES.mbbr)) return
+  s.equip.mbbr += 1
+  addLog(
+    s,
+    'info',
+    `MBBR-Biofilter ${s.equip.mbbr} eingebaut. Auf den wirbelnden Kunststoffkörpern wachsen viel mehr Bakterien. Sie müssen sich aber erst ansiedeln.`,
+  )
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GreenhouseView } from './render/greenhouse.ts'
-import { advance, currentAir } from './sim/simulate.ts'
+import { advance, currentAir, refreshLive } from './sim/simulate.ts'
 import { clearSave, load, newGame, save, type GameState } from './sim/state.ts'
 import { FishPanel } from './ui/FishPanel.tsx'
 import { clock, dateLabel, dayNo, eur, num } from './ui/format.ts'
@@ -29,7 +29,7 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 export default function App() {
-  const game = useRef<GameState>(load() ?? newGame())
+  const game = useRef<GameState>(refreshLive(load() ?? newGame()))
   const [speed, setSpeed] = useState(2)
   const speedRef = useRef(speed)
   speedRef.current = speed
@@ -50,6 +50,7 @@ export default function App() {
   const act = useCallback(
     (fn: (s: GameState) => void) => {
       fn(game.current)
+      refreshLive(game.current)
       save(game.current)
       rerender()
     },
@@ -129,6 +130,7 @@ export default function App() {
         <div className="stat" title="Wassertemperatur / Luft">
           🌡 {num(s.water.temp)}° <small>Luft {num(currentAir(s), 0)}°</small>
         </div>
+        {s.outage > 0 && <div className="stat outage">⚡ Stromausfall</div>}
         <div className={`stat money ${s.money < 0 ? 'neg' : ''}`}>{eur(s.money)}</div>
       </header>
 
@@ -167,7 +169,7 @@ export default function App() {
           <HelpPanel
             onReset={() => {
               clearSave()
-              game.current = newGame()
+              game.current = refreshLive(newGame())
               setSelected(-1)
               setSpeed(2)
               rerender()

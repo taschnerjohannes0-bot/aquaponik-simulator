@@ -1,5 +1,5 @@
 // Spielt die Simulation ohne Oberfläche durch, um die Werte zu prüfen: npm run sim
-import { buyFeed, addBuffer, addIron, buyFish, harvest, plantSeedling, waterChange } from '../src/sim/actions.ts'
+import { buyEquip, buyFeed, addBuffer, addIron, buyFish, buyMbbr, harvest, plantSeedling, releaseBeneficials, waterChange } from '../src/sim/actions.ts'
 import { PLANTS } from '../src/sim/data.ts'
 import { advance, biomassKg, dropFeed, snapshot } from '../src/sim/simulate.ts'
 import { newGame } from '../src/sim/state.ts'
@@ -31,10 +31,13 @@ for (let day = 1; day <= Number(process.argv[4] ?? 90); day++) {
     if (r.nh3 > 0.05 || r.no2 > 1.5) waterChange(s, 0.25)
     if (r.kh < 2) addBuffer(s)
     if (r.fe < 0.8) addIron(s)
+    if (s.pests > 0.25 && s.beneficials < 0.3) releaseBeneficials(s)
+    if (process.env.PRO && !s.equip.batteryAir) buyEquip(s, 'batteryAir')
+    if (process.env.PRO && s.money > 450 && s.equip.mbbr < 1) buyMbbr(s)
     s.water.deadCount = 0
     s.water.deadMass = 0
     s.slots.forEach((p, i) => {
-      if (!p) return plantSeedling(s, i, i % 2 ? 'salat' : 'mangold')
+      if (!p) return s.money > 20 && plantSeedling(s, i, i % 2 ? 'salat' : 'mangold')
       if (p.dead || p.mass >= PLANTS[p.species].harvestMass) harvest(s, i)
     })
   }

@@ -76,6 +76,33 @@ export function HelpPanel({ onReset }: { onReset: () => void }) {
           <b>Jahreszeiten:</b> Das Gewächshaus ist im Winter kalt. Dann wachsen Fische, Pflanzen und Bakterien langsamer.
         </li>
       </ul>
+      <h3>Profi-Anlage</h3>
+      <ul>
+        <li>
+          <b>Feststofffilter:</b> Kot und Futterreste müssen raus, bevor sie faulen. Erst Radialabscheider (Schlamm ab und zu ablassen), später Trommelfilter.
+        </li>
+        <li>
+          <b>MBBR-Biofilter:</b> Viel mehr Platz für Bakterien. Ohne ihn kommen die Bakterien bei vielen Fischen nicht hinterher.
+        </li>
+        <li>
+          <b>Sauerstoff:</b> Luftpumpe, Rieselturm und für hohe Besatzdichte ein Sauerstoffkonzentrator.
+        </li>
+        <li>
+          <b>Stromausfall:</b> Ohne Luft ersticken dichte Bestände in wenigen Stunden. Eine Akku-Luftpumpe oder ein Notstromaggregat sichert ab.
+        </li>
+        <li>
+          <b>Krankheiten:</b> Neue Fische bringen manchmal Weißpünktchen mit. Salz (2–3 g/L) heilt, ein UV-Klärer beugt vor. Stress macht anfällig.
+        </li>
+        <li>
+          <b>Schädlinge:</b> Blattläuse nur mit Nützlingen bekämpfen. Spritzmittel würden die Fische töten. Ein Insektennetz beugt vor.
+        </li>
+        <li>
+          <b>Klima:</b> Heizung im Winter, Lüftung und Schattierung im Sommer, LED-Licht für kurze Tage. Kostet Energie, bringt Ernte.
+        </li>
+        <li>
+          <b>Mineralisierer und Dosierstation:</b> Machen aus Fischschlamm Dünger und halten Puffer und Eisen automatisch im Lot.
+        </li>
+      </ul>
       <h3>Ziel</h3>
       <p>Verkaufe Ernte und Fische, baue die Anlage aus und halte alles im Gleichgewicht.</p>
       <p className="muted small">

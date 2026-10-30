@@ -1,5 +1,5 @@
-import { addAmmonia, addBuffer, addIron, addStarter, measure, siphon, waterChange } from '../sim/actions.ts'
-import { PRICES } from '../sim/data.ts'
+import { addAmmonia, addBuffer, addIron, addSalt, addStarter, emptySludge, measure, siphon, waterChange } from '../sim/actions.ts'
+import { PRICES, SLUDGE_CAP } from '../sim/data.ts'
 import { snapshot } from '../sim/simulate.ts'
 import type { GameState, Reading } from '../sim/state.ts'
 import { Chart } from './Chart.tsx'
@@ -46,6 +46,15 @@ export function WaterPanel({ s, act }: { s: GameState; act: (fn: (s: GameState) 
           </div>
           <div className="v-hint">Thermometer zeigt immer live an</div>
         </div>
+        {s.water.salt > 0.05 && (
+          <div className={`value ${s.water.salt > 4 ? 'bad' : s.water.salt > 2 ? 'warn' : 'good'}`}>
+            <div className="v-label">Salz</div>
+            <div className="v-num">
+              {num(s.water.salt)} <small>g/L</small>
+            </div>
+            <div className="v-hint">Hilft kranken Fischen. Über 2 g/L leiden die Pflanzen</div>
+          </div>
+        )}
         {ROWS.map((row) => {
           const v = last ? row.value(last) : undefined
           return (
@@ -86,6 +95,17 @@ export function WaterPanel({ s, act }: { s: GameState; act: (fn: (s: GameState) 
         </button>
         <button onClick={() => act(siphon)}>
           Schlamm absaugen <small>{num(s.water.solids, 0)} g Reste</small>
+        </button>
+        {s.equip.mechFilter === 1 && (
+          <button onClick={() => act(emptySludge)} disabled={s.water.sludge < 1}>
+            Radialabscheider ablassen{' '}
+            <small>
+              {num(s.water.sludge, 0)} von {SLUDGE_CAP} g{s.equip.mineralizer ? ' · in den Mineralisierer' : ''}
+            </small>
+          </button>
+        )}
+        <button onClick={() => act(addSalt)}>
+          Salz zugeben <small>+1 g/L, gegen Krankheiten · {eur(PRICES.saltKg * dose)}</small>
         </button>
         <button onClick={() => act(addBuffer)}>
           Puffer (Kaliumcarbonat) <small>+1 °dKH · {eur(PRICES.buffer * dose)}</small>

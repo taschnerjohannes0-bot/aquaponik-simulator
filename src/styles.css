@@ -534,3 +534,30 @@ button:active:not(:disabled) {
 .help li {
   margin-bottom: 6px;
 }
+.alert {
+  flex-wrap: wrap;
+}
+.alert.warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-weight: 600;
+}
+.alert.good {
+  background: var(--good-bg);
+  color: var(--good);
+}
+.alert.warn button,
+.alert.good button {
+  background: var(--accent-2);
+}
+.on-text {
+  color: var(--good);
+  font-weight: 600;
+}
+.stat.outage {
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+.panel h3 {
+  margin-top: 18px;
+}

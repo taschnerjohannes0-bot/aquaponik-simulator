@@ -1,6 +1,6 @@
 import { airTemp, clamp, daylight, dayOfYear, nh3Fraction, o2Saturation, phOf, tempFactor } from './chemistry.ts'
-import { AIR_KLA, AIR_WATT, FISH, PLANTS, PRICES, TAP, type PlantSpecies } from './data.ts'
-import type { FishGroup, GameState, LogKind, Reading } from './state.ts'
+import { AIR_KLA, AIR_WATT, FISH, PLANTS, PRICES, SLUDGE_CAP, TAP, type PlantSpecies } from './data.ts'
+import type { FishGroup, GameState, Live, LogKind, Reading } from './state.ts'
 
 /** Simulationsschritt in Spielstunden */
 export const DT = 1 / 12
@@ -40,12 +40,65 @@ export function currentPh(s: GameState) {
   return phOf(s.water.kh, s.water.co2)
 }
 
+/** Lufttemperatur im Gewächshaus (mit Heizung und Lüftung) */
 export function currentAir(s: GameState) {
-  return airTemp(dayOfYear(s.startDoy, s.t), s.t % 24)
+  return climate(s).air
 }
 
 export function currentLight(s: GameState) {
   return daylight(dayOfYear(s.startDoy, s.t), s.t % 24)
+}
+
+/** Ist Strom da? (Netz oder Notstromaggregat) */
+export function hasPower(s: GameState) {
+  return s.outage <= 0 || s.equip.generator
+}
+
+/** Wirksame Stufe der Belüftung (bei Stromausfall nur die Akku-Pumpe) */
+export function aeration(s: GameState) {
+  const e = s.equip
+  return hasPower(s) ? e.airPump : e.batteryAir ? Math.min(1, e.airPump) || 1 : 0
+}
+
+/** Gewächshausklima: Heizung, Lüftung/Schattierung und Pflanzenlicht */
+export function climate(s: GameState): Live {
+  const e = s.equip
+  const hour = s.t % 24
+  const doy = dayOfYear(s.startDoy, s.t)
+  const power = hasPower(s)
+  let air = airTemp(doy, hour)
+  let light = daylight(doy, hour)
+  let airHeating = false
+  let venting = false
+  let shading = false
+  if (e.airHeater && e.airHeaterOn && power && air < e.airHeaterSet) {
+    air = e.airHeaterSet
+    airHeating = true
+  }
+  if (e.climate && power && air > 24) {
+    air = 24 + (air - 24) * 0.45
+    venting = true
+    if (light > 0.7) {
+      light *= 0.8
+      air -= 1.5
+      shading = true
+    }
+  }
+  let plantLight = light
+  const ledActive = e.led && e.ledOn && power && hour >= 5 && hour < 22 && light < 0.5
+  if (ledActive) plantLight = 0.5
+  return { air, light, plantLight, power, airHeating, venting, shading, ledActive, watts: 0 }
+}
+
+/** Klima-Anzeige sofort aktualisieren (nach Laden oder Umschalten, auch im Pausenmodus) */
+export function refreshLive(s: GameState) {
+  s.live = { ...climate(s), watts: s.live?.watts ?? 0 }
+  return s
+}
+
+/** Kapazität der Bakterien (mg N/h): kleiner Grundfilter, Wurzeln in den Beeten, MBBR-Module */
+export function bioCapacity(s: GameState) {
+  return 150 + 60 * s.equip.beds + 1500 * s.equip.mbbr
 }
 
 export function snapshot(s: GameState): Reading {
@@ -98,30 +151,67 @@ export function step(s: GameState, dt: number) {
   const w = s.water
   const V = w.volume
   const scale = 1000 / V
-  const hour = s.t % 24
-  const doy = dayOfYear(s.startDoy, s.t)
-  const air = airTemp(doy, hour)
-  const light = daylight(doy, hour)
-  const ph = phOf(w.kh, w.co2)
   const e = s.equip
-  const pump = e.pumpOn
+  const ph = phOf(w.kh, w.co2)
+
+  // --- Stromausfall ---
+  if (s.outage > 0) {
+    s.outage -= dt
+    if (s.outage <= 0) {
+      s.outage = 0
+      addLog(s, 'good', 'Der Strom ist wieder da.')
+    }
+  } else if (s.t > 24 * 45 && Math.random() < dt / (24 * 70)) {
+    s.outage = 1 + Math.random() * 5
+    addLog(
+      s,
+      e.generator ? 'warn' : 'bad',
+      e.generator
+        ? 'Stromausfall! Das Notstromaggregat ist angesprungen und hält alles am Laufen.'
+        : e.batteryAir
+          ? 'Stromausfall! Die Pumpe steht, nur die Akku-Luftpumpe sprudelt noch.'
+          : 'Stromausfall! Pumpen und Belüftung stehen still. Der Sauerstoff im Wasser sinkt.',
+    )
+  }
+  const live = climate(s)
+  s.live = live
+  const power = live.power
+  const air = live.air
+  const light = live.plantLight
+  const pump = e.pumpOn && power
+  const airLevel = aeration(s)
 
   let tanMg = 0
   let o2Mg = 0
   let co2Mg = 0
-  let kWh = 0
+  let watts = 0
 
   // --- Temperatur und Strom ---
   w.temp += (air - w.temp) * 0.03 * Math.sqrt(scale) * dt
-  if (e.heater && e.heaterOn && w.temp < e.heaterSet) {
+  if (e.heater && e.heaterOn && power && w.temp < e.heaterSet) {
     w.temp = Math.min(e.heaterSet, w.temp + 0.6 * scale * dt)
-    kWh += 0.3 * dt
+    watts += 300
   }
-  if (pump) kWh += 0.04 * dt
-  kWh += (AIR_WATT[e.airPump] / 1000) * dt
-  if (kWh > 0) {
-    s.energyKWh += kWh
-    pay(s, kWh * PRICES.kWh)
+  if (pump) watts += 40 * Math.sqrt(V / 1000)
+  watts += AIR_WATT[airLevel] * Math.sqrt(V / 1000)
+  if (power) {
+    if (e.mechFilter === 2 && pump) watts += 60
+    watts += 40 * e.mbbr
+    if (e.degasser) watts += 20
+    if (e.uv) watts += 40
+    if (e.oxygen && e.oxygenOn) watts += 350
+    if (e.mineralizer) watts += 10
+    if (live.venting) watts += 150
+    if (live.ledActive) watts += 150 * e.beds
+  }
+  live.watts = watts
+  const kWh = (watts / 1000) * dt
+  s.energyKWh += kWh
+  if (s.outage > 0 && e.generator) pay(s, PRICES.generatorHour * dt)
+  else pay(s, kWh * PRICES.kWh)
+  if (live.airHeating) {
+    const outside = airTemp(dayOfYear(s.startDoy, s.t), s.t % 24)
+    pay(s, (e.airHeaterSet - outside) * 0.5 * (0.6 + 0.4 * e.beds) * PRICES.gasKWh * dt)
   }
 
   // --- Futterautomat ---
@@ -183,7 +273,8 @@ export function step(s: GameState, dt: number) {
 
     let stress = 0
     stress += Math.max(0, nh3 - 0.05) * 4 * sp.sensitivity
-    stress += Math.max(0, w.no2 - 1) * 0.12 * sp.sensitivity
+    // Chlorid aus Kochsalz schützt die Kiemen vor Nitrit
+    stress += (Math.max(0, w.no2 - 1) * 0.12 * sp.sensitivity) / (1 + w.salt * 1.5)
     stress += Math.max(0, w.no3 - 150) * 0.01
     stress += Math.max(0, sp.doMin - w.o2) * 3
     if (w.temp < sp.tMin) stress += (sp.tMin - w.temp) * 3
@@ -193,6 +284,25 @@ export function step(s: GameState, dt: number) {
     if (ph > 9) stress += (ph - 9) * 3
     stress += Math.max(0, w.co2 - 25) * 0.1
     if (g.hoursHungry > 72) stress += 0.1
+    if (w.salt > 6) stress += (w.salt - 6) * 0.3
+
+    // Weißpünktchenkrankheit: Stress, Enge und neue Fische machen anfällig, UV und Salz helfen
+    if (g.disease > 0) {
+      const cure = w.salt >= 2 ? 0.015 : g.health > 85 ? 0.001 : 0
+      g.disease = clamp(g.disease + (0.006 * (1 + stress * 3) * (w.temp > 18 ? 1 : 0.5) * (e.uv && power ? 0.6 : 1) - cure) * dt)
+      if (g.disease > 0.25)
+        notify(s, `ich-${g.id}`, 48, 'warn', `Die ${sp.name} haben weiße Pünktchen und scheuern sich am Beckenrand. Eine Salzbehandlung mit 2–3 g/L hilft.`)
+      if (g.disease <= 0) {
+        g.disease = 0
+        if (s.flags[`ich-${g.id}`] !== undefined) addLog(s, 'good', `Die ${sp.name} sind wieder gesund.`)
+        delete s.flags[`ich-${g.id}`]
+      }
+      stress += g.disease * 1.2
+    } else {
+      const density = (biomassKg(s) / V) * 1000
+      const risk = 0.00003 * (1 + stress * 30) * (1 + density / 30) * (e.uv && power ? 0.25 : 1)
+      if (Math.random() < risk * dt) g.disease = 0.02
+    }
     g.health = clamp(g.health + (0.5 * (1 - Math.min(1, stress * 4)) - stress) * dt, 0, 100)
 
     if (g.health < 35) {
@@ -249,13 +359,45 @@ export function step(s: GameState, dt: number) {
       w.deadCount = 0
     }
   }
+  // --- Mechanische Filterung und Mineralisierung ---
+  const toMineral = (g: number) => {
+    if (e.mineralizer) w.mineral += g
+  }
+  let backwashL = 0
+  if (pump && e.mechFilter > 0 && w.solids > 0) {
+    if (e.mechFilter === 2) {
+      const removed = w.solids * 0.35 * dt
+      w.solids -= removed
+      toMineral(removed)
+      backwashL = V * (0.01 / 24) * dt
+    } else {
+      const removed = w.solids * 0.18 * (w.sludge < SLUDGE_CAP ? 1 : 0.1) * dt
+      w.solids -= removed
+      w.sludge += removed
+      if (w.sludge > SLUDGE_CAP * 0.8) notify(s, 'sludge', 48, 'warn', 'Der Radialabscheider ist fast voll. Entleere den Schlamm, sonst fault er.')
+    }
+  }
+  if (w.sludge > 0) {
+    // Schlamm im Abscheider fault langsam und gibt Ammonium ab
+    const dec = w.sludge * 0.003 * decayT * dt
+    w.sludge -= dec
+    tanMg += dec * 20
+    o2Mg += dec * 300
+  }
+  if (w.mineral > 0 && power) {
+    // Belüfteter Mineralisierungstank: Schlamm wird zu Pflanzennährstoffen
+    const dec = w.mineral * 0.012 * dt
+    w.mineral -= dec
+    w.no3 += (dec * 25) / V
+    w.fe += (dec * 0.4) / V
+  }
   w.tan += tanMg / V
 
   // --- Nitrifikation ---
   const fTb = w.temp <= 30 ? Math.min(1, Math.pow(1.06, w.temp - 28)) : clamp(1 - (w.temp - 30) * 0.12, 0.1, 1)
   const fPh = ph < 7.5 ? clamp(1 - (7.5 - ph) * 0.45, 0.03, 1) : ph > 8.6 ? clamp(1 - (ph - 8.6) * 0.8, 0.1, 1) : 1
   const fDo = w.o2 / (1 + w.o2)
-  const flow = pump ? 1 : 0.15
+  const flow = pump ? 1 : e.mbbr && power ? 0.4 : 0.15
   const env = fTb * fPh * fDo * flow
   let rA = s.aob * (w.tan / (0.7 + w.tan)) * env
   rA = Math.min(rA, (w.tan * V) / dt)
@@ -268,9 +410,19 @@ export function step(s: GameState, dt: number) {
   w.no3 += (rN * dt) / V
   o2Mg += (rA * 3.43 + rN * 1.14) * dt
   w.kh = Math.max(0, w.kh - ((rA * dt) / V) * 0.4)
-  const cap = e.beds * 1500 + 60 * (V / 1000)
+  const cap = bioCapacity(s)
   s.aob = clamp(s.aob + (0.045 * rA - 0.003 * s.aob) * dt, 0.02, cap)
   s.nob = clamp(s.nob + (0.045 * rN - 0.002 * s.nob) * dt, 0.02, cap)
+
+  // --- Schädlinge: Blattläuse vermehren sich bei Wärme, Nützlinge fressen sie ---
+  const hasPlants = s.slots.some((p) => p && !p.dead)
+  const warm = clamp((air - 12) / 10)
+  if (hasPlants && s.pests < 0.02 && Math.random() < dt * 0.0008 * warm * (e.insectNet ? 0.2 : 1)) s.pests = 0.03
+  s.pests = clamp(s.pests + (0.006 * s.pests * (1 - s.pests) * warm * (hasPlants ? 1 : -3) - 0.03 * s.beneficials * s.pests) * dt)
+  if (s.pests < 0.005) s.pests = 0
+  s.beneficials = Math.max(0, s.beneficials - 0.002 * dt)
+  if (s.pests > 0.25)
+    notify(s, 'pests', 72, 'warn', 'Blattläuse breiten sich auf den Pflanzen aus! Setze Nützlinge ein. Gift ist tabu, es würde die Fische töten.')
 
   // --- Pflanzen ---
   s.dryHours = pump ? 0 : s.dryHours + dt
@@ -287,7 +439,7 @@ export function step(s: GameState, dt: number) {
     const nAvail = w.no3 + 0.5 * w.tan
     const fN = nAvail / (nAvail + 3)
     // Liebigsches Minimumgesetz: Der knappste Faktor bremst das Wachstum
-    const common = light * Math.min(fT, fN, fFe) * (p.health / 100) * (wet ? 1 : 0)
+    const common = light * Math.min(fT, fN, fFe) * (p.health / 100) * (wet ? 1 : 0) * (1 - s.pests * 0.5)
     let dM = plantGrowthRate(sp) * p.mass * (1 - p.mass / plantMaxMass(sp)) * common * dt
     let dF = 0
     if (sp.fruiting && p.ageH / 24 > sp.fruiting.startDay) dF = sp.fruiting.gramsPerLightHour * common * dt
@@ -319,6 +471,8 @@ export function step(s: GameState, dt: number) {
     if (ph < 5.5) stress += (5.5 - ph) * 0.5
     if (ph > 8.5) stress += (ph - 8.5) * 0.5
     if (pump && w.o2 < 2) stress += 0.3
+    if (s.pests > 0.4) stress += (s.pests - 0.4) * 0.5
+    if (w.salt > 2) stress += (w.salt - 2) * 0.3
     p.health = clamp(p.health + (stress > 0 ? -stress : 0.3) * dt, 0, 100)
     if (p.health <= 0) {
       p.dead = true
@@ -332,16 +486,32 @@ export function step(s: GameState, dt: number) {
     if (p.chlorosis > 0.45) notify(s, 'chlorosis', 72, 'warn', 'Einige Pflanzen bekommen gelbe Blätter mit grünen Adern. Das deutet auf Eisenmangel hin.')
     if (p.nDeficit > 0.5) notify(s, 'ndef', 72, 'warn', 'Die Pflanzen werden blass und wachsen langsam. Es fehlt an Nährstoffen (Nitrat).')
   }
-  if (!wet) notify(s, 'dry', 24, 'bad', 'Die Pumpe ist aus: Das Pflanzbeet trocknet aus und die Pflanzen welken!')
+  if (!wet) notify(s, 'dry', 24, 'bad', 'Die Pumpe steht still: Das Pflanzbeet trocknet aus und die Pflanzen welken!')
 
   // --- Gasaustausch ---
-  const kla = ((pump ? 0.15 : 0.03) + AIR_KLA[e.airPump]) * Math.sqrt(scale)
+  const extra = power ? 0.15 * e.mbbr + (e.degasser ? 0.15 : 0) : 0
+  const kla = ((pump ? 0.15 : 0.03) + AIR_KLA[airLevel] + extra) * Math.sqrt(scale)
+  const klaCo2 = kla * 0.5 + (e.degasser && pump ? 0.9 * Math.sqrt(scale) : 0)
   const sat = o2Saturation(w.temp)
   w.o2 = clamp(w.o2 + (sat - w.o2) * Math.min(1, kla * dt) - o2Mg / V, 0, 20)
-  w.co2 = Math.max(0.3, w.co2 + co2Mg / V + (1 - w.co2) * Math.min(1, kla * 0.5 * dt))
+  if (e.oxygen && e.oxygenOn && power) w.o2 += Math.min((12000 * dt) / V, Math.max(0, sat * 1.6 - w.o2))
+  w.co2 = Math.max(0.3, w.co2 + co2Mg / V + (1 - w.co2) * Math.min(1, klaCo2 * dt))
+
+  // --- Dosieranlage ---
+  if (e.doser && e.doserOn && power) {
+    const dose = V / 1000
+    if (w.kh < e.doserKh) {
+      w.kh += 0.5 * dt
+      pay(s, PRICES.buffer * dose * 0.5 * dt)
+    }
+    if (w.fe < e.doserFe) {
+      w.fe += 0.2 * dt
+      pay(s, PRICES.iron * dose * 0.2 * dt)
+    }
+  }
 
   // --- Verdunstung, automatisches Nachfüllen mit Leitungswasser ---
-  const evapL = V * (0.004 / 24) * dt * (1 + Math.max(0, air - 15) * 0.03) + transpL
+  const evapL = V * (0.004 / 24) * dt * (1 + Math.max(0, air - 15) * 0.03) + transpL + backwashL
   const r = evapL / V
   w.kh += TAP.kh * r
   w.no3 += TAP.no3 * r
@@ -361,6 +531,8 @@ export function step(s: GameState, dt: number) {
     if (w.temp > sp.optMax + 2) notify(s, `hot-${sp.id}`, 48, 'warn', `Das Wasser ist zu warm für ${sp.name} (${w.temp.toFixed(1)} °C).`)
     if (g.health < 50) notify(s, `sick-${g.id}`, 24, 'warn', `Die ${sp.name} wirken matt und krank. Prüfe die Wasserwerte!`)
   }
+  if (s.outage > 0 && !e.generator && s.fish.length && w.o2 < 4)
+    notify(s, 'outage-o2', 12, 'bad', 'Wegen des Stromausfalls wird der Sauerstoff knapp! Ein Notstromaggregat hätte das verhindert.')
   if (s.money < 0) notify(s, 'broke', 48, 'bad', 'Dein Konto ist im Minus! Verkaufe Ernte oder Fische.')
 
   // --- Messsonden ---

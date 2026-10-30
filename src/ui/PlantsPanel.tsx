@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { harvest, plantSeedling, plantValue, removePlant } from '../sim/actions.ts'
-import { PLANTS, PLANT_IDS, SLOTS_PER_BED, type PlantId } from '../sim/data.ts'
+import { harvest, plantSeedling, plantValue, releaseBeneficials, removePlant } from '../sim/actions.ts'
+import { PLANTS, PLANT_IDS, PRICES, SLOTS_PER_BED, type PlantId } from '../sim/data.ts'
 import { plantMaxMass } from '../sim/simulate.ts'
 import type { GameState, Plant } from '../sim/state.ts'
 import { eur, grams, num } from './format.ts'
@@ -43,6 +43,17 @@ export function PlantsPanel({
         <h2>Pflanzbeete</h2>
         <span className="muted">Tippe auf einen Platz</span>
       </div>
+      {(s.pests > 0.08 || s.beneficials > 0.05) && (
+        <div className={`alert ${s.pests > 0.4 ? 'bad' : s.pests > 0.08 ? 'warn' : 'good'}`}>
+          {s.pests > 0.08 ? `Blattläuse: ${s.pests > 0.4 ? 'starker' : s.pests > 0.2 ? 'mittlerer' : 'leichter'} Befall. ` : 'Keine Blattläuse zu sehen. '}
+          {s.beneficials > 0.05 ? `Nützlinge sind unterwegs (${Math.round(s.beneficials * 100)} %).` : 'Gift ist tabu, es würde die Fische töten.'}
+          {s.beneficials < 0.3 && s.pests > 0.08 && (
+            <button onClick={() => act(releaseBeneficials)}>
+              Nützlinge aussetzen <small>{eur(PRICES.beneficials)}</small>
+            </button>
+          )}
+        </div>
+      )}
       {Array.from({ length: s.equip.beds }, (_, b) => (
         <div className="bed" key={b}>
           {Array.from({ length: SLOTS_PER_BED }, (_, i) => {

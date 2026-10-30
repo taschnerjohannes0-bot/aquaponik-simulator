@@ -5,7 +5,8 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { clamp } from '../sim/chemistry.ts'
 import { FISH, PLANTS, SLOTS_PER_BED, type PlantId } from '../sim/data.ts'
-import { currentLight, plantMaxMass } from '../sim/simulate.ts'
+import { aeration, hasPower, plantMaxMass } from '../sim/simulate.ts'
+import { EquipmentView } from './equipment.ts'
 import type { GameState, Plant } from '../sim/state.ts'
 
 // --- Aufbau (Meter). "Tiefe" d zählt vom Eingang nach hinten, Welt-z = -d ---
@@ -359,6 +360,7 @@ export class GreenhouseView {
   private yaw = 0
   private yawTarget = 0
   private disposeInput: () => void
+  private equipment: EquipmentView
 
   private canvas: HTMLCanvasElement
   private cb: ViewCallbacks
@@ -398,6 +400,13 @@ export class GreenhouseView {
     this.buildTunnel()
     this.buildPlumbing()
     this.scene.add(this.tankGroup)
+    this.equipment = new EquipmentView(
+      { bedX: BED_X, bedW: BED_W, bedD0: BED_D0, bedD1: BED_D1, tankH: TANK_H, half: TUNNEL_HALF, wall: TUNNEL_WALL, start: TUNNEL_START, end: TUNNEL_END },
+      this.steel,
+      this.dot,
+      this.waterNormals,
+    )
+    this.scene.add(this.equipment.group)
 
     const fishMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.15 })
     this.fishMesh = new THREE.InstancedMesh(fishGeo(), fishMat, 240)
@@ -905,13 +914,15 @@ export class GreenhouseView {
       sm.color.copy(base)
       sm.normalMap!.offset.set(time * 0.02, time * 0.013)
       ;(t.water.material as THREE.MeshPhysicalMaterial).color.copy(body)
-      t.stream.visible = s.equip.pumpOn
+      t.stream.visible = s.equip.pumpOn && hasPower(s)
       t.stream.scale.y = 1 + Math.sin(time * 20) * 0.05
       // Luftblasen steigen auf und schäumen oben
       const geo = t.bubbles.geometry
       const pos = geo.attributes.position as THREE.BufferAttribute
       const seeds = t.bubbles.userData.seed as number[][]
-      const active = s.equip.airPump * 50 + (s.equip.pumpOn ? 20 : 0)
+      const pumping = s.equip.pumpOn && hasPower(s)
+      const air = aeration(s)
+      const active = air * 50 + (pumping ? 20 : 0) + (s.equip.oxygen && s.equip.oxygenOn && hasPower(s) ? 30 : 0)
       const { x, d, r } = t.def
       const inX = x + (x < 0 ? 0.5 : -0.5) * r
       for (let i = 0; i < seeds.length; i++) {
@@ -920,15 +931,16 @@ export class GreenhouseView {
           pos.setXYZ(i, 0, -10, 0)
           continue
         }
-        if (i < 20 && s.equip.pumpOn) {
+        if (i < 20 && pumping) {
           // Schaum am Zulauf
           const ang = a * Math.PI * 2 + time * 1.5
           const rad = ((b + time * 0.4) % 1) * 0.35
           pos.setXYZ(i, inX + Math.cos(ang) * rad, TANK_H - 0.09, -d - r * 0.55 + Math.sin(ang) * rad)
           continue
         }
-        const stone = Math.floor(c * Math.max(1, s.equip.airPump))
-        const sx = x + (stone - (s.equip.airPump - 1) / 2) * r * 0.5
+        const stones = Math.max(1, air)
+        const stone = Math.floor(c * stones)
+        const sx = x + (stone - (stones - 1) / 2) * r * 0.5
         const prog = (b + time * (0.25 + a * 0.2)) % 1
         pos.setXYZ(i, sx + Math.sin(time * 3 + i) * 0.05 + (a - 0.5) * 0.2, 0.08 + prog * (TANK_H - 0.18), -d + (c - 0.5) * 0.25)
       }
@@ -1015,7 +1027,7 @@ export class GreenhouseView {
   }
 
   private updateLight(s: GameState) {
-    const light = currentLight(s)
+    const light = s.live.light
     const hour = s.t % 24
     const az = ((hour - 6) / 12) * Math.PI
     this.sun.position.set(Math.cos(az) * 14, 6 + light * 16, -17 + Math.sin(az) * 6)
@@ -1066,11 +1078,13 @@ export class GreenhouseView {
     this.updateLight(s)
     this.updateWater(s, time)
     this.updateFish(s, time, dt, running)
+    this.equipment.update(s, time, dt)
     this.renderer.render(this.scene, this.camera)
   }
 
   dispose() {
     this.disposeInput()
+    this.equipment.dispose()
     this.renderer.dispose()
   }
 }

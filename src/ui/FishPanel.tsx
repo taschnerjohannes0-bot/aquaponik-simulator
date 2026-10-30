@@ -79,7 +79,7 @@ export function FishPanel({ s, act }: { s: GameState; act: (fn: (s: GameState) =
             </div>
             <div className="card-row small muted">
               <span>
-                Gesundheit {Math.round(g.health)} % · {full > 0.6 ? 'satt' : full > 0.15 ? 'frisst' : g.hoursHungry > 48 ? 'sehr hungrig' : 'hungrig'}
+                Gesundheit {Math.round(g.health)} %{g.disease > 0.15 ? ' · weiße Pünktchen' : ''} · {full > 0.6 ? 'satt' : full > 0.15 ? 'frisst' : g.hoursHungry > 48 ? 'sehr hungrig' : 'hungrig'}
               </span>
               <span>
                 Ziel {grams(f.harvestWeight)} · {num(f.optMin, 0)}–{num(f.optMax, 0)} °C

@@ -165,7 +165,31 @@ export const PRICES = {
   tank: [0, 300, 900],
   waterPerLiter: 0.004,
   kWh: 0.35,
+  /** Gas für die Gewächshausheizung pro kWh */
+  gasKWh: 0.12,
+  /** Diesel fürs Notstromaggregat pro Betriebsstunde */
+  generatorHour: 1.5,
+  /** Salz pro kg (1 kg = +1 g/L in 1000 L) */
+  saltKg: 0.6,
+  beneficials: 25,
+  mechFilter: [0, 180, 900],
+  mbbr: 350,
+  degasser: 260,
+  uv: 160,
+  oxygen: 1200,
+  generator: 700,
+  batteryAir: 35,
+  mineralizer: 220,
+  doser: 480,
+  airHeater: 650,
+  climate: 550,
+  led: 900,
+  insectNet: 120,
 }
+
+export const MAX_MBBR = 3
+/** Fassungsvermögen des Radialabscheiders (g Schlamm) */
+export const SLUDGE_CAP = 3000
 
 export const TANK_SIZES = [1000, 2000, 4000]
 export const MAX_BEDS = 4
