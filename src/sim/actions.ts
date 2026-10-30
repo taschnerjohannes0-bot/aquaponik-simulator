@@ -1,5 +1,5 @@
 import { FISH, MAX_BEDS, MAX_MBBR, PLANTS, PRICES, SLOTS_PER_BED, TANK_SIZES, TAP, type FishId, type PlantId } from './data.ts'
-import { addLog, pay, snapshot } from './simulate.ts'
+import { addLog, advance, pay, snapshot } from './simulate.ts'
 import type { FishGroup, GameState, Plant } from './state.ts'
 
 function spend(s: GameState, cost: number) {
@@ -367,4 +367,26 @@ export function buyMbbr(s: GameState) {
     'info',
     `MBBR-Biofilter ${s.equip.mbbr} eingebaut. Auf den wirbelnden Kunststoffkörpern wachsen viel mehr Bakterien. Sie müssen sich aber erst ansiedeln.`,
   )
+}
+
+// --- Echtzeit ---
+
+/** Spieluhr und Kalender an die echte Uhrzeit und das echte Datum angleichen */
+export function syncToRealClock(s: GameState, now = new Date()) {
+  const realHour = now.getHours() + now.getMinutes() / 60
+  const ahead = (realHour - (s.t % 24) + 24) % 24
+  advance(s, ahead)
+  const jan1 = new Date(now.getFullYear(), 0, 1)
+  const realDoy = Math.min(365, Math.floor((now.getTime() - jan1.getTime()) / 86400000) + 1)
+  s.startDoy = ((((realDoy - 1 - Math.floor(s.t / 24)) % 365) + 365) % 365) + 1
+  addLog(s, 'info', 'Echtzeit: Uhrzeit und Datum laufen jetzt wie in echt, auch wenn die App geschlossen ist.')
+}
+
+export function durationText(h: number) {
+  const d = Math.floor(h / 24)
+  const hh = Math.round(h - d * 24)
+  const parts: string[] = []
+  if (d) parts.push(d === 1 ? '1 Tag' : `${d} Tage`)
+  if (hh || !d) parts.push(hh === 1 ? '1 Stunde' : `${hh} Stunden`)
+  return parts.join(' und ')
 }

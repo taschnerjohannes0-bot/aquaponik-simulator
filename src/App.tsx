@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GreenhouseView } from './render/greenhouse.ts'
-import { advance, currentAir, refreshLive } from './sim/simulate.ts'
+import { durationText, syncToRealClock } from './sim/actions.ts'
+import { addLog, advance, currentAir, refreshLive } from './sim/simulate.ts'
 import { clearSave, load, newGame, save, type GameState } from './sim/state.ts'
 import { FishPanel } from './ui/FishPanel.tsx'
 import { clock, dateLabel, dayNo, eur, num } from './ui/format.ts'
@@ -12,11 +13,16 @@ import { WaterPanel } from './ui/WaterPanel.tsx'
 /** Spielstunden pro Echtzeit-Sekunde */
 const SPEEDS = [
   { v: 0, label: '❚❚', title: 'Pause' },
+  { v: 1 / 3600, label: '1:1', title: 'Echtzeit: läuft wie in echt, auch bei geschlossener App' },
   { v: 1 / 6, label: '▶', title: '10 Minuten pro Sekunde' },
   { v: 1, label: '▶▶', title: '1 Stunde pro Sekunde' },
   { v: 6, label: '▶▶▶', title: '6 Stunden pro Sekunde' },
   { v: 24, label: '⏩', title: '1 Tag pro Sekunde' },
 ]
+
+const REAL = 1
+/** So viel verpasste Zeit wird beim Öffnen höchstens nachgeholt */
+const MAX_CATCHUP_H = 24 * 14
 
 type Tab = 'wasser' | 'fische' | 'pflanzen' | 'technik' | 'tagebuch' | 'hilfe'
 const TABS: { id: Tab; label: string }[] = [
@@ -30,7 +36,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function App() {
   const game = useRef<GameState>(refreshLive(load() ?? newGame()))
-  const [speed, setSpeed] = useState(2)
+  const [speed, setSpeed] = useState(() => game.current.flags._speed ?? 3)
   const speedRef = useRef(speed)
   speedRef.current = speed
   const [, setTick] = useState(0)
@@ -57,6 +63,17 @@ export default function App() {
     [rerender],
   )
 
+  const pickSpeed = (i: number) => {
+    if (i === REAL && speedRef.current !== REAL) {
+      act((g) => {
+        syncToRealClock(g)
+        g.flags._wall = Date.now()
+      })
+    }
+    game.current.flags._speed = i
+    setSpeed(i)
+  }
+
   // Hauptschleife: Simulation + Zeichnen
   useEffect(() => {
     let raf = 0
@@ -75,8 +92,25 @@ export default function App() {
       const dtReal = Math.min(0.1, (now - last) / 1000)
       last = now
       const s = game.current
-      const hours = SPEEDS[speedRef.current].v * dtReal
-      if (hours > 0) advance(s, hours)
+      const wall = Date.now()
+      if (speedRef.current === REAL) {
+        // Echtzeit: genau so viel Spielzeit wie echte Zeit vergangen ist, auch während die App zu war
+        const gap = Math.max(0, (wall - (s.flags._wall ?? wall)) / 3.6e6)
+        advance(s, Math.min(gap, MAX_CATCHUP_H))
+        if (gap > 0.5)
+          addLog(
+            s,
+            'info',
+            gap > MAX_CATCHUP_H
+              ? `Du warst ${durationText(gap)} weg. Nachgeholt wurden die letzten 14 Tage. Im Tagebuch steht, was passiert ist.`
+              : `Du warst ${durationText(gap)} weg. Im Tagebuch steht, was in der Zeit passiert ist.`,
+          )
+      } else {
+        const hours = SPEEDS[speedRef.current].v * dtReal
+        if (hours > 0) advance(s, hours)
+      }
+      s.flags._wall = wall
+      s.flags._speed = speedRef.current
       const seq = s.flags._seq ?? 0
       if (seq < seenLog) seenLog = seq
       if (seq !== seenLog) {
@@ -85,7 +119,7 @@ export default function App() {
         const newest = fresh[fresh.length - 1]
         if (newest) {
           setToast({ text: newest.text, kind: newest.kind })
-          if (fresh.some((l) => l.kind === 'bad') && speedRef.current > 0) setSpeed(0)
+          if (fresh.some((l) => l.kind === 'bad') && speedRef.current > REAL) setSpeed(0)
         }
       }
       view.render(s, now / 1000, selectedRef.current, speedRef.current > 0)
@@ -144,7 +178,7 @@ export default function App() {
         )}
         <div className="speeds">
           {SPEEDS.map((sp, i) => (
-            <button key={i} title={sp.title} className={i === speed ? 'on' : ''} onClick={() => setSpeed(i)}>
+            <button key={i} title={sp.title} className={i === speed ? 'on' : ''} onClick={() => pickSpeed(i)}>
               {sp.label}
             </button>
           ))}
@@ -171,7 +205,7 @@ export default function App() {
               clearSave()
               game.current = refreshLive(newGame())
               setSelected(-1)
-              setSpeed(2)
+              setSpeed(3)
               rerender()
             }}
           />

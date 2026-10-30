@@ -106,7 +106,11 @@ export function HelpPanel({ onReset }: { onReset: () => void }) {
       <h3>Ziel</h3>
       <p>Verkaufe Ernte und Fische, baue die Anlage aus und halte alles im Gleichgewicht.</p>
       <p className="muted small">
-        Bei schlimmen Ereignissen hält das Spiel automatisch an. Dein Spielstand wird auf diesem Gerät gespeichert.
+        <b>1:1 (Echtzeit):</b> Uhrzeit und Datum laufen wie in echt weiter, auch wenn die App geschlossen ist. Beim Öffnen wird die verpasste Zeit
+        nachgeholt (höchstens 14 Tage). In Echtzeit hält das Spiel nicht von selbst an, schau also regelmäßig nach deinen Fischen.
+      </p>
+      <p className="muted small">
+        In den schnellen Stufen hält das Spiel bei schlimmen Ereignissen automatisch an. Dein Spielstand wird auf diesem Gerät gespeichert.
       </p>
       <button
         className="danger"
