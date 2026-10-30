@@ -200,6 +200,12 @@ export default function App() {
         {tab === 'tagebuch' && <LogPanel s={s} />}
         {tab === 'hilfe' && (
           <HelpPanel
+            onTestMoney={() =>
+              act((g) => {
+                g.money += 10000
+                addLog(g, 'info', 'Testgeld: 10.000 € gutgeschrieben.')
+              })
+            }
             onReset={() => {
               clearSave()
               game.current = refreshLive(newGame())

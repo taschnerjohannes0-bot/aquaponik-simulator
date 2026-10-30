@@ -27,7 +27,7 @@ export function LogPanel({ s }: { s: GameState }) {
   )
 }
 
-export function HelpPanel({ onReset }: { onReset: () => void }) {
+export function HelpPanel({ onReset, onTestMoney }: { onReset: () => void; onTestMoney: () => void }) {
   return (
     <div className="panel help">
       <h2>So funktioniert Aquaponik</h2>
@@ -112,6 +112,11 @@ export function HelpPanel({ onReset }: { onReset: () => void }) {
       <p className="muted small">
         In den schnellen Stufen hält das Spiel bei schlimmen Ereignissen automatisch an. Dein Spielstand wird auf diesem Gerät gespeichert.
       </p>
+      <h3>Testmodus</h3>
+      <p className="muted small">Zum Ausprobieren der ganzen Technik. Das Geld wird nicht als Einnahme gezählt.</p>
+      <button className="wide" onClick={onTestMoney}>
+        Testgeld +10.000 €
+      </button>
       <button
         className="danger"
         onClick={() => {
