@@ -64,13 +64,12 @@ export default function App() {
   )
 
   const pickSpeed = (i: number) => {
-    if (i === REAL && speedRef.current !== REAL) {
-      act((g) => {
-        syncToRealClock(g)
-        g.flags._wall = Date.now()
-      })
-    }
-    game.current.flags._speed = i
+    const wasReal = speedRef.current === REAL
+    act((g) => {
+      g.flags._speed = i
+      if (i === REAL && !wasReal) syncToRealClock(g)
+      g.flags._wall = Date.now()
+    })
     setSpeed(i)
   }
 
