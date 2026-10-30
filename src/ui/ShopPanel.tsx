@@ -99,7 +99,7 @@ export function ShopPanel({ s, act }: { s: GameState; act: (fn: (s: GameState) =
             {e.beds} von {MAX_BEDS}
           </span>
         </div>
-        <p className="small muted">Mehr Beete heißt mehr Pflanzen, die Nitrat verbrauchen, und mehr Platz für Bakterien.</p>
+        <p className="small muted">Mehr Beete heißt mehr Pflanzen, die Nitrat verbrauchen, und mehr Fläche für Bakterien.</p>
         {e.beds < MAX_BEDS && (
           <button onClick={() => act(buyBed)}>
             Beet bauen <small>{eur(PRICES.bed)}</small>
@@ -108,10 +108,10 @@ export function ShopPanel({ s, act }: { s: GameState; act: (fn: (s: GameState) =
       </div>
       <div className="card">
         <div className="card-row">
-          <strong>Fischtank</strong>
+          <strong>Fischbecken</strong>
           <span>{TANK_SIZES[e.tankLevel]} L</span>
         </div>
-        <p className="small muted">Mehr Wasser verträgt mehr Fische und reagiert langsamer auf Fehler.</p>
+        <p className="small muted">Mehr Becken und mehr Wasser vertragen mehr Fische und reagieren langsamer auf Fehler.</p>
         {e.tankLevel < TANK_SIZES.length - 1 && (
           <button onClick={() => act(upgradeTank)}>
             Auf {TANK_SIZES[e.tankLevel + 1]} L <small>{eur(PRICES.tank[e.tankLevel + 1])}</small>

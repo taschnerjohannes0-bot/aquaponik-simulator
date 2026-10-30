@@ -271,5 +271,5 @@ export function upgradeTank(s: GameState) {
   w.temp = w.temp * keep + TAP.temp * add
   w.volume = newV
   s.equip.tankLevel = next
-  addLog(s, 'info', `Neuer Fischtank mit ${newV} L. Mehr Wasser macht die Werte stabiler.`)
+  addLog(s, 'info', `Weitere Fischbecken, jetzt ${newV} L. Mehr Wasser macht die Werte stabiler.`)
 }

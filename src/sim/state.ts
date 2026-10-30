@@ -187,7 +187,7 @@ export function newGame(): GameState {
     t: s.t,
     kind: 'info',
     text:
-      'Willkommen! Dein Fischtank (1000 L) ist mit Leitungswasser gefüllt, das Pflanzbeet ist leer. ' +
+      'Willkommen! Dein Fischbecken (1000 L) ist mit Leitungswasser gefüllt, das Pflanzbeet ist leer. ' +
       'Eine neue Anlage muss erst „einfahren“: Bakterien, die giftiges Ammoniak in Nitrat umwandeln, brauchen einige Wochen. ' +
       'Setz am Anfang nur wenige Fische ein, füttere sparsam und miss regelmäßig das Wasser.',
   })

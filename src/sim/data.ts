@@ -162,12 +162,12 @@ export const PRICES = {
   autoFeeder: 60,
   probes: 250,
   bed: 120,
-  tank: [0, 300, 650],
+  tank: [0, 300, 900],
   waterPerLiter: 0.004,
   kWh: 0.35,
 }
 
-export const TANK_SIZES = [1000, 2000, 3000]
+export const TANK_SIZES = [1000, 2000, 4000]
 export const MAX_BEDS = 4
 export const SLOTS_PER_BED = 18
 export const AIR_KLA = [0, 0.4, 0.8, 1.4]

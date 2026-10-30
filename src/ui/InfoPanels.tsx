@@ -32,14 +32,14 @@ export function HelpPanel({ onReset }: { onReset: () => void }) {
     <div className="panel help">
       <h2>So funktioniert Aquaponik</h2>
       <p>
-        Fische und Pflanzen teilen sich einen Wasserkreislauf. Die Pumpe bringt das Fischwasser ins Pflanzbeet, von dort fließt es gereinigt zurück.
+        Fische und Pflanzen teilen sich einen Wasserkreislauf. Die Pumpe bringt das Fischwasser durch den Biofilter in die Pflanzbeete, von dort fließt es gereinigt zurück.
       </p>
       <ol>
         <li>
           <b>Fische</b> fressen und scheiden <b>Ammonium</b> aus. Futterreste und tote Fische verrotten ebenfalls zu Ammonium.
         </li>
         <li>
-          <b>Bakterien</b> im Blähton machen daraus erst <b>Nitrit</b>, dann <b>Nitrat</b>. Beides passiert nur mit Sauerstoff.
+          <b>Bakterien</b> im Biofilter und an den Wurzeln machen daraus erst <b>Nitrit</b>, dann <b>Nitrat</b>. Beides passiert nur mit Sauerstoff.
         </li>
         <li>
           <b>Pflanzen</b> nehmen Nitrat als Dünger auf und reinigen so das Wasser für die Fische.

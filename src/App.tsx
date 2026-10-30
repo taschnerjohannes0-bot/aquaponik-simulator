@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { drawScene, H, hitSlot, W } from './render/scene.ts'
+import { drawScene, H, hitSlot, hitTank, W } from './render/scene.ts'
 import { advance, currentAir } from './sim/simulate.ts'
 import { clearSave, load, newGame, save, type GameState } from './sim/state.ts'
 import { FishPanel } from './ui/FishPanel.tsx'
@@ -123,7 +123,7 @@ export default function App() {
     if (slot >= 0) {
       setSelected(slot)
       setTab('pflanzen')
-    } else if (y > 320) setTab('fische')
+    } else if (hitTank(s, x, y)) setTab('fische')
   }
 
   return (

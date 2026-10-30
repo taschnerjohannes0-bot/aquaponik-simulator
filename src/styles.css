@@ -99,7 +99,7 @@ button {
 .scene {
   display: block;
   width: 100%;
-  aspect-ratio: 800 / 520;
+  aspect-ratio: 800 / 640;
   cursor: pointer;
   touch-action: manipulation;
 }
